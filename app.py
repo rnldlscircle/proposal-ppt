@@ -7,14 +7,19 @@ from modules.ppt_generator import generate_pptx
 from modules.slack_client import fetch_channel_messages, search_messages_by_keyword
 from modules.web_scraper import scrape_website, search_industry_news
 
-load_dotenv()
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+load_dotenv(dotenv_path=r"C:\Users\GA\proposal-ppt\.env", override=False)
 
-# Streamlit Cloud secrets fallback
 def _get_secret(key: str, default: str = "") -> str:
     try:
-        return st.secrets.get(key, default)
+        val = st.secrets.get(key, "")
+        if val:
+            return val
     except Exception:
-        return os.getenv(key, default)
+        pass
+    return os.getenv(key, default)
+
+_ENV_API_KEY = _get_secret("ANTHROPIC_API_KEY")
 
 st.set_page_config(
     page_title="제안서 자동 생성기",
@@ -37,7 +42,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("📊 제안서 자동 생성기")
-st.caption("과업지시서와 자료를 넣으면 AI가 논리적인 스토리라인으로 PPT를 만들어드립니다")
+st.caption("과업지시서와 자료를 넣으면 AI가 논리적인 분석결과를 만들어줍니다")
 
 # ── 파일 읽기 유틸 ────────────────────────────────────────────
 def _read_file_safe(f) -> str:
@@ -103,12 +108,13 @@ with col_name:
 with col_api:
     anthropic_key = st.text_input(
         "🔑 Anthropic API Key",
-        value=_get_secret("ANTHROPIC_API_KEY"),
         type="password",
         placeholder="없으면 비워두세요 (템플릿 모드로 생성)",
-    )
+    ) or _ENV_API_KEY
 
-if not anthropic_key:
+if _ENV_API_KEY:
+    st.success("🔑 API Key 환경변수 설정됨 — 자동 사용 중")
+elif not anthropic_key:
     st.info("💡 API Key 없이도 생성 가능합니다 — AI 분석 없이 입력 내용 기반 기본 구조로 만들어집니다")
 
 st.divider()
@@ -324,16 +330,10 @@ if generate_btn:
                 height = section_display_height(section)
                 components.html(section_html, height=height, scrolling=False)
 
-            # 전체 HTML 다운로드
+            # 전체 HTML — session_state에 저장해서 리런 후에도 다운로드 가능
             full_html = render_full_page(analysis)
-            st.download_button(
-                label="⬇️ HTML 보고서 다운로드",
-                data=full_html.encode("utf-8"),
-                file_name=f"{customer_name or '분석보고서'}_사전분석.html",
-                mime="text/html",
-                type="primary",
-                use_container_width=True,
-            )
+            st.session_state["_web_html"]  = full_html
+            st.session_state["_web_fname"] = f"{customer_name or '분석보고서'}_사전분석.html"
 
         # ── PPT 다운로드 ────────────────────────────────────────
         else:
@@ -380,3 +380,14 @@ if generate_btn:
         progress.empty()
         st.error(f"생성 실패: {str(e)}")
         st.exception(e)
+
+# ── 웹 보고서 다운로드 버튼 (리런 후에도 유지) ─────────────────
+if "_web_html" in st.session_state and output_mode == "🌐 웹 분석 보고서":
+    st.download_button(
+        label="⬇️ HTML 보고서 다운로드",
+        data=st.session_state["_web_html"].encode("utf-8"),
+        file_name=st.session_state["_web_fname"],
+        mime="text/html",
+        type="primary",
+        use_container_width=True,
+    )
