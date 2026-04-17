@@ -1,0 +1,8 @@
+.env
+.streamlit/secrets.toml
+__pycache__/
+*.pyc
+*.png
+*.pptx
+.venv/
+uv.lock
