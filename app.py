@@ -334,6 +334,7 @@ if generate_btn:
             full_html = render_full_page(analysis)
             st.session_state["_web_html"]  = full_html
             st.session_state["_web_fname"] = f"{customer_name or '분석보고서'}_사전분석.html"
+            st.session_state["_web_title"] = analysis.get("title", customer_name or "분석보고서")
 
         # ── PPT 다운로드 ────────────────────────────────────────
         else:
@@ -381,13 +382,36 @@ if generate_btn:
         st.error(f"생성 실패: {str(e)}")
         st.exception(e)
 
-# ── 웹 보고서 다운로드 버튼 (리런 후에도 유지) ─────────────────
+# ── 웹 보고서 다운로드 + 공유 링크 (리런 후에도 유지) ──────────
 if "_web_html" in st.session_state and output_mode == "🌐 웹 분석 보고서":
-    st.download_button(
-        label="⬇️ HTML 보고서 다운로드",
-        data=st.session_state["_web_html"].encode("utf-8"),
-        file_name=st.session_state["_web_fname"],
-        mime="text/html",
-        type="primary",
-        use_container_width=True,
-    )
+    col_dl, col_share = st.columns(2)
+    with col_dl:
+        st.download_button(
+            label="⬇️ HTML 다운로드",
+            data=st.session_state["_web_html"].encode("utf-8"),
+            file_name=st.session_state["_web_fname"],
+            mime="text/html",
+            type="primary",
+            use_container_width=True,
+        )
+    with col_share:
+        if st.button("🔗 공유 링크 생성", type="secondary", use_container_width=True):
+            github_token = _get_secret("GITHUB_TOKEN")
+            if not github_token:
+                st.error("GITHUB_TOKEN이 설정되지 않았습니다")
+            else:
+                with st.spinner("링크 생성 중..."):
+                    try:
+                        from modules.gist_uploader import upload_report
+                        url = upload_report(
+                            st.session_state["_web_html"],
+                            st.session_state.get("_web_title", "분석보고서"),
+                            github_token,
+                        )
+                        st.session_state["_share_url"] = url
+                    except Exception as e:
+                        st.error(f"링크 생성 실패: {e}")
+
+    if "_share_url" in st.session_state:
+        st.success("공유 링크가 생성됐습니다 — 고객사에 바로 전달하세요")
+        st.code(st.session_state["_share_url"], language=None)
